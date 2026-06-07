@@ -1,0 +1,15 @@
+# Training runs on Modal (see modal_app.py); these are the GPU-image deps.
+# The pure layer (config, schedule, fingerprint) needs NONE of these.
+# The core math tests (cka, gating, losses) need only torch.
+torch>=2.1
+transformers>=4.44,<5   # <5: community remote-code (MiniCPM/Phi-3.5) needs the 4.x API
+peft>=0.11
+accelerate>=0.30
+bitsandbytes>=0.43
+datasets>=2.19
+umap-learn>=0.5
+numpy
+# For the manual Hub push:
+huggingface_hub>=0.23
+# Modal orchestration:
+modal>=0.64

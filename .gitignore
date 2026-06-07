@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Tests
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Model weights (nunca commitar — ficam no Modal volume / HF Hub)
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.gguf
+
+# Local data
+viz_data.json
+*.glb
+
+# Env / secrets
+.env
+*.env
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
