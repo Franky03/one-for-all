@@ -6,8 +6,22 @@ PointCloud primitives render at 1px in Three.js regardless of scale;
 small spheres give controllable apparent size.
 """
 from __future__ import annotations
+import os
+import json
+import struct
 import tempfile
+from pathlib import Path
 import numpy as np
+
+
+def _gradio_tmp() -> str:
+    # Gradio 5 only serves files inside its own temp dir; /tmp/tmpXXX.glb is
+    # outside it and returns 403. Match the same path Gradio uses internally.
+    d = os.environ.get("GRADIO_TEMP_DIR") or str(
+        (Path(tempfile.gettempdir()) / "gradio").resolve()
+    )
+    os.makedirs(d, exist_ok=True)
+    return d
 
 _COLORS_RGB: list[tuple[int, int, int]] = [
     (230, 237, 243),  # student  — #e6edf3
@@ -22,6 +36,42 @@ _PROBE_COLOR = (255, 255, 255)
 
 def _hex(r: int, g: int, b: int) -> str:
     return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def _inject_material(glb: bytes) -> bytes:
+    """Add a matte PBR material to every primitive in a GLB.
+
+    trimesh exports vertex-colored meshes with POSITION + COLOR_0 but no
+    material, so model-viewer (the PBR renderer behind gr.Model3D) falls back
+    to the glTF default material (metallicFactor=1, roughnessFactor=1). Under
+    model-viewer's neutral environment a fully-metallic surface renders dark,
+    which is why the model looked gray. A matte (metallic=0) material lets the
+    per-vertex COLOR_0 show through, lit correctly.
+    """
+    json_len = struct.unpack("<I", glb[12:16])[0]
+    json_bytes = glb[20:20 + json_len]
+    bin_chunk = glb[20 + json_len:]  # keeps its own 8-byte chunk header
+    gltf = json.loads(json_bytes)
+    gltf.setdefault("materials", []).append({
+        "pbrMetallicRoughness": {
+            "baseColorFactor": [1, 1, 1, 1],
+            "metallicFactor": 0.0,
+            "roughnessFactor": 0.85,
+        },
+        "doubleSided": True,
+    })
+    midx = len(gltf["materials"]) - 1
+    for mesh in gltf.get("meshes", []):
+        for prim in mesh["primitives"]:
+            prim["material"] = midx
+    new_json = json.dumps(gltf, separators=(",", ":")).encode("utf-8")
+    new_json += b" " * ((-len(new_json)) % 4)   # 4-byte align, pad with spaces
+    out = bytearray()
+    out += struct.pack("<III", 0x46546C67, 2, 12 + 8 + len(new_json) + len(bin_chunk))
+    out += struct.pack("<II", len(new_json), 0x4E4F534A)  # JSON chunk header
+    out += new_json
+    out += bin_chunk
+    return bytes(out)
 
 
 def build_glb(
@@ -82,12 +132,20 @@ def build_glb(
     faces    = np.concatenate(all_faces,  axis=0)
     colors   = np.concatenate(all_colors, axis=0)
 
-    mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
-    mesh.visual.vertex_colors = colors
+    # vertex_colors in the constructor → COLOR_0 attribute on export.
+    mesh = trimesh.Trimesh(
+        vertices=vertices, faces=faces, vertex_colors=colors, process=False
+    )
+    _ = mesh.vertex_normals  # force smooth normals so the PBR renderer can shade
 
-    path = tempfile.mktemp(suffix=".glb")
-    mesh.export(path)
-    return path
+    glb_bytes = _inject_material(mesh.export(file_type="glb", include_normals=True))
+
+    tmp = tempfile.NamedTemporaryFile(
+        suffix=".glb", dir=_gradio_tmp(), delete=False
+    )
+    tmp.write(glb_bytes)
+    tmp.close()
+    return tmp.name
 
 
 def build_legend_html(viz: dict) -> str:
@@ -111,7 +169,7 @@ def build_legend_html(viz: dict) -> str:
     items.append(
         '<div style="display:flex;align-items:center;gap:6px;">'
         '<div style="width:8px;height:8px;border-radius:50%;background:#ffffff;flex-shrink:0;"></div>'
-        '<span style="font-size:11px;color:#8b949e;font-family:monospace;">● probe — your input</span>'
+        '<span style="font-size:11px;color:#8b949e;font-family:monospace;">probe — your input</span>'
         '</div>'
     )
     return (

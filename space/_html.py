@@ -65,33 +65,53 @@ def task_html(gate_weights: list[float], teacher_names: list[str]) -> str:
 
 def header_html() -> str:
     """App header with ∀ logo, wordmark, and status pills."""
-    def pill(color: str, dot_color: str, text: str) -> str:
+    def pill(color: str, dot_color: str, text: str, pulse: bool = False) -> str:
+        dot_class = ' class="live-dot"' if pulse else ''
         return (
-            f'<span style="display:inline-flex;align-items:center;gap:8px;height:30px;'
-            f'padding:0 12px;border-radius:999px;font-family:monospace;font-size:11px;'
-            f'font-weight:500;letter-spacing:0.04em;color:{color};'
-            f'background:#161b22;border:1px solid #30363d;">'
-            f'<span style="width:7px;height:7px;border-radius:50%;background:{dot_color};'
-            f'box-shadow:0 0 8px {dot_color};"></span>{text}</span>'
+            f'<span style="display:inline-flex;align-items:center;gap:8px;height:28px;'
+            f'padding:0 12px;border-radius:999px;font-family:monospace;font-size:10px;'
+            f'font-weight:600;letter-spacing:0.06em;color:{color};'
+            f'background:rgba(13,17,23,0.8);border:1px solid {color}33;'
+            f'backdrop-filter:blur(8px);white-space:nowrap;">'
+            f'<span{dot_class} style="width:6px;height:6px;border-radius:50%;'
+            f'background:{dot_color};box-shadow:0 0 7px {dot_color};flex-shrink:0;"></span>'
+            f'{text}</span>'
         )
     return (
         '<div style="display:flex;align-items:center;justify-content:space-between;'
-        'padding:16px 4px 12px;gap:16px;">'
+        'padding:20px 2px 14px;gap:16px;flex-wrap:wrap;">'
+
+        # Left: logo + title
         '<div style="display:flex;align-items:center;gap:14px;">'
-        '<div style="width:44px;height:44px;display:grid;place-items:center;'
-        'border-radius:6px;background:radial-gradient(60% 60% at 50% 40%,'
-        'rgba(124,58,237,0.30),transparent 70%),#14181f;border:1px solid #2a2333;">'
-        '<span style="font-family:monospace;font-weight:700;font-size:28px;color:#7c3aed;">∀</span>'
+        '<div style="width:46px;height:46px;display:grid;place-items:center;flex-shrink:0;'
+        'border-radius:10px;'
+        'background:radial-gradient(circle at 40% 35%, rgba(124,58,237,0.45) 0%, rgba(8,11,16,0.9) 70%);'
+        'border:1px solid rgba(124,58,237,0.35);'
+        'box-shadow:0 0 20px rgba(124,58,237,0.2),inset 0 1px 0 rgba(255,255,255,0.07);">'
+        '<span style="font-family:monospace;font-weight:800;font-size:26px;'
+        'background:linear-gradient(135deg,#a78bfa,#7c3aed);'
+        '-webkit-background-clip:text;-webkit-text-fill-color:transparent;'
+        'background-clip:text;">∀</span>'
         '</div>'
         '<div>'
-        '<div style="font-weight:600;font-size:17px;color:#e6edf3;">One for All</div>'
-        '<div style="font-size:12px;color:#8b949e;margin-top:2px;">multi-teacher soul distillation</div>'
+        '<div style="font-weight:700;font-size:18px;letter-spacing:-0.01em;'
+        'background:linear-gradient(90deg,#e6edf3 0%,#a78bfa 100%);'
+        '-webkit-background-clip:text;-webkit-text-fill-color:transparent;'
+        'background-clip:text;">One for All</div>'
+        '<div style="font-size:11px;color:#484f58;margin-top:2px;font-family:monospace;'
+        'letter-spacing:0.05em;text-transform:uppercase;">multi-teacher soul distillation</div>'
         '</div></div>'
-        '<div style="display:flex;gap:10px;flex-wrap:wrap;">'
-        + pill("#06b6d4", "#06b6d4", "STUDENT Qwen2.5-0.5B")
+
+        # Right: pills
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+        + pill("#06b6d4", "#06b6d4", "STUDENT · Qwen2.5-0.5B", pulse=True)
         + pill("#7c3aed", "#7c3aed", "5 TEACHERS")
-        + pill("#f59e0b", "#f59e0b", "PATH B · geometry-only")
+        + pill("#f59e0b", "#f59e0b", "PATH B · GEOMETRY")
         + '</div></div>'
-        '<div style="height:1px;margin-bottom:24px;background:linear-gradient('
-        '90deg,transparent 0%,rgba(124,58,237,0.55) 50%,transparent 100%);"></div>'
+
+        # Divider with glow
+        '<div style="height:1px;margin-bottom:22px;'
+        'background:linear-gradient(90deg,transparent 0%,rgba(124,58,237,0.6) 40%,'
+        'rgba(6,182,212,0.4) 70%,transparent 100%);'
+        'box-shadow:0 0 12px rgba(124,58,237,0.15);"></div>'
     )

@@ -15,7 +15,6 @@ import _fig
 import _glb
 import _html
 import _probe
-import _three
 
 # ── Startup: load data, fit UMAP, load student ───────────────────────────
 HF_TOKEN = os.environ.get("HF_TOKEN")
@@ -31,10 +30,17 @@ except Exception as e:
     print(f"[ofa-space] viz_data.json not available ({e}), using empty state")
     VIZ = _data.make_empty_viz()
 
-if VIZ["stacked"].shape[0] > 3:
-    REDUCER  = _data.fit_umap3d(VIZ["stacked"])
-    COORDS3D = REDUCER.embedding_
-else:
+try:
+    if VIZ["stacked"].shape[0] > 3:
+        REDUCER  = _data.fit_umap3d(VIZ["stacked"])
+        COORDS3D = REDUCER.embedding_
+        print(f"[ofa-space] UMAP done: {COORDS3D.shape}")
+    else:
+        print(f"[ofa-space] not enough points for UMAP: {VIZ['stacked'].shape[0]}")
+        REDUCER  = None
+        COORDS3D = None
+except Exception as e:
+    print(f"[ofa-space] UMAP failed ({e}), 3D disabled")
     REDUCER  = None
     COORDS3D = None
 
@@ -47,6 +53,9 @@ except Exception as e:
     _MODEL_READY = False
 
 _INIT_GLB = _glb.build_glb(VIZ, COORDS3D, [])
+print(f"[ofa-space] GLB path: {_INIT_GLB}")
+if _INIT_GLB:
+    print(f"[ofa-space] GLB exists: {os.path.exists(_INIT_GLB)}, size: {os.path.getsize(_INIT_GLB)} bytes")
 
 # Camera: pull back far enough to see all points at startup
 if COORDS3D is not None:
@@ -92,40 +101,212 @@ def probe_fn(text: str, probe_points: list) -> tuple:
 
 # ── CSS ───────────────────────────────────────────────────────────────────
 CSS = """
+/* ── Variables ─────────────────────────────────────────── */
 :root {
-  --bg: #0d1117; --panel: #161b22; --border: #30363d;
-  --indigo: #7c3aed; --cyan: #06b6d4; --amber: #f59e0b;
-  --text: #e6edf3; --text-dim: #8b949e;
-  --mono: "JetBrains Mono", ui-monospace, monospace;
+  --bg:           #080b10;
+  --panel:        #0d1117;
+  --panel2:       #111620;
+  --border:       #1c2129;
+  --border-hi:    #30363d;
+  --indigo:       #7c3aed;
+  --indigo-dim:   rgba(124,58,237,0.18);
+  --cyan:         #06b6d4;
+  --amber:        #f59e0b;
+  --green:        #34d399;
+  --pink:         #f472b6;
+  --text:         #e6edf3;
+  --text-dim:     #8b949e;
+  --text-faint:   #484f58;
+  --mono:         "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --radius:       10px;
 }
-.gradio-container { background: var(--bg) !important; font-family: system-ui, sans-serif; }
+
+/* ── Base ───────────────────────────────────────────────── */
+* { box-sizing: border-box; }
+
+.gradio-container {
+  background: var(--bg) !important;
+  background-image:
+    radial-gradient(ellipse 90% 60% at 10% -5%,  rgba(124,58,237,0.07) 0%, transparent 55%),
+    radial-gradient(ellipse 70% 50% at 90% 105%,  rgba(6,182,212,0.05)  0%, transparent 55%)
+    !important;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  min-height: 100vh;
+}
+
 footer { display: none !important; }
-.tab-nav button { font-family: var(--mono) !important; font-size: 12px !important; }
-.tab-nav button.selected { background: var(--indigo) !important; color: white !important; }
+
+/* ── All blocks: remove default boxy look ───────────────── */
+.block {
+  background: var(--panel) !important;
+  border:     1px solid var(--border) !important;
+  border-radius: var(--radius) !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4), 0 0 0 0 transparent !important;
+  transition: border-color 0.25s, box-shadow 0.25s !important;
+  padding: 0 !important;
+}
+.block:hover {
+  border-color: var(--border-hi) !important;
+}
+
+/* Remove the double-border that Gradio adds */
+.block .block { border: none !important; background: transparent !important; }
+
+/* ── Label text ─────────────────────────────────────────── */
+label > span, .label-wrap span, .block-label span {
+  font-family: var(--mono) !important;
+  font-size:   10px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.09em !important;
+  text-transform: uppercase !important;
+  color: var(--text-faint) !important;
+}
+
+/* ── Textarea / input ───────────────────────────────────── */
+textarea, input[type="text"], input[type="number"] {
+  background:   #060a10 !important;
+  border:       1px solid var(--border-hi) !important;
+  color:        var(--text) !important;
+  border-radius: 8px !important;
+  font-size:    13px !important;
+  line-height:  1.6 !important;
+  transition:   border-color 0.2s, box-shadow 0.2s !important;
+  resize: vertical !important;
+}
+textarea:focus, input[type="text"]:focus {
+  border-color: var(--indigo) !important;
+  box-shadow:   0 0 0 3px rgba(124,58,237,0.12),
+                0 0 18px rgba(124,58,237,0.18) !important;
+  outline: none !important;
+}
+textarea::placeholder { color: var(--text-faint) !important; }
+
+/* ── Primary button ─────────────────────────────────────── */
+button.primary, button[variant="primary"] {
+  background:   linear-gradient(135deg, #6d28d9, var(--indigo)) !important;
+  border:       1px solid rgba(124,58,237,0.45) !important;
+  border-radius: 8px !important;
+  color:        #fff !important;
+  font-family:  var(--mono) !important;
+  font-size:    12px !important;
+  font-weight:  700 !important;
+  letter-spacing: 0.07em !important;
+  text-transform: uppercase !important;
+  padding:      10px 22px !important;
+  transition:   all 0.2s ease !important;
+  box-shadow:   0 2px 10px rgba(124,58,237,0.22) !important;
+  cursor: pointer !important;
+}
+button.primary:hover {
+  background:   linear-gradient(135deg, var(--indigo), #8b5cf6) !important;
+  box-shadow:   0 4px 20px rgba(124,58,237,0.45),
+                0 0 0 1px rgba(124,58,237,0.35) !important;
+  transform:    translateY(-1px) !important;
+}
+button.primary:active { transform: translateY(0) !important; }
+
+/* Secondary buttons */
+button.secondary {
+  background:  var(--panel2) !important;
+  border:      1px solid var(--border-hi) !important;
+  color:       var(--text-dim) !important;
+  border-radius: 8px !important;
+  transition:  all 0.2s !important;
+}
+button.secondary:hover {
+  border-color: var(--indigo) !important;
+  color: var(--text) !important;
+}
+
+/* ── Tabs: underline style (Linear / GitHub / Vercel) ───── */
+.tabs > .tab-nav,
+div[role="tablist"] {
+  background:   transparent !important;
+  border-bottom: 1px solid var(--border) !important;
+  gap: 0 !important;
+  padding: 0 2px !important;
+}
+.tab-nav button, div[role="tab"] {
+  background:    transparent !important;
+  border:        none !important;
+  border-bottom: 2px solid transparent !important;
+  border-radius: 0 !important;
+  color:         var(--text-dim) !important;
+  font-family:   var(--mono) !important;
+  font-size:     11px !important;
+  font-weight:   600 !important;
+  letter-spacing: 0.07em !important;
+  text-transform: uppercase !important;
+  padding:       10px 18px 9px !important;
+  margin-bottom: -1px !important;
+  transition:    color 0.18s, border-color 0.18s !important;
+  box-shadow: none !important;
+}
+.tab-nav button:hover {
+  color:         var(--text) !important;
+  border-bottom-color: rgba(124,58,237,0.4) !important;
+}
+.tab-nav button.selected {
+  color:        var(--indigo) !important;
+  border-bottom: 2px solid var(--indigo) !important;
+  background:   transparent !important;
+  box-shadow:   none !important;
+}
+
+/* ── Plotly / charts: transparent background ────────────── */
+.plot-container, .plot-container > div, .js-plotly-plot {
+  background: transparent !important;
+}
+
+/* ── Model3D container ──────────────────────────────────── */
+div[data-testid="model3d"], .model3D-component {
+  border-radius: var(--radius) !important;
+  overflow: hidden !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: 0 0 40px rgba(124,58,237,0.08) inset !important;
+}
+
+/* ── Scrollbars ─────────────────────────────────────────── */
+::-webkit-scrollbar              { width: 5px; height: 5px; }
+::-webkit-scrollbar-track        { background: var(--bg); }
+::-webkit-scrollbar-thumb        { background: var(--border-hi); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover  { background: var(--text-faint); }
+
+/* ── Animated LIVE badge ─────────────────────────────────── */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; box-shadow: 0 0 6px var(--cyan); }
+  50%       { opacity: 0.5; box-shadow: 0 0 2px var(--cyan); }
+}
+.live-dot { animation: pulse-dot 1.8s ease-in-out infinite; }
+
+/* ── Fade-in on load ─────────────────────────────────────── */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.gradio-container > .main > .wrap { animation: fadeUp 0.45s ease; }
+
+/* ── Row/col gaps ────────────────────────────────────────── */
+.gap { gap: 14px !important; }
+.row { gap: 14px !important; }
 """
 
 # ── Layout ────────────────────────────────────────────────────────────────
 with gr.Blocks(css=CSS, theme=gr.themes.Base(), title="One for All") as demo:
 
     gr.HTML(_html.header_html())
-    gr.Image(
-        value="one_for_all.gif",
-        show_label=False,
-        interactive=False,
-        container=False,
-    )
     probe_state = gr.State([])
 
     with gr.Tabs():
 
         # ── Tab 1: Almas ──────────────────────────────────────────────────
-        with gr.TabItem("∀  Almas /01"):
+        with gr.TabItem("Souls"):
             with gr.Row():
                 with gr.Column(scale=6):
                     umap_plot = gr.Model3D(
                         value=_INIT_GLB,
                         display_mode="solid",
-                        clear_color=[0.051, 0.067, 0.090, 1.0],
+                        clear_color=[0.031, 0.043, 0.063, 1.0],
                         height=500,
                         label=None,
                         camera_position=_CAM,
@@ -155,7 +336,7 @@ with gr.Blocks(css=CSS, theme=gr.themes.Base(), title="One for All") as demo:
                     )
 
         # ── Tab 2: Geometria ──────────────────────────────────────────────
-        with gr.TabItem("⬡  Geometria /02"):
+        with gr.TabItem("Geometry"):
             with gr.Row():
                 with gr.Column(scale=7):
                     gr.Plot(
@@ -191,7 +372,7 @@ with gr.Blocks(css=CSS, theme=gr.themes.Base(), title="One for All") as demo:
                         )
 
         # ── Tab 3: Treino ─────────────────────────────────────────────────
-        with gr.TabItem("↗  Treino /03"):
+        with gr.TabItem("Training"):
             with gr.Row():
                 gr.Plot(
                     value=_fig.build_curves_fig(VIZ["curves"]),
@@ -208,6 +389,7 @@ with gr.Blocks(css=CSS, theme=gr.themes.Base(), title="One for All") as demo:
         inputs=[prompt_box, probe_state],
         outputs=[umap_plot, probe_state, resp_out, gate_out, task_out],
     )
+
 
 if __name__ == "__main__":
     demo.launch()

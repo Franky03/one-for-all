@@ -52,21 +52,32 @@ class StudentSpec:
 @dataclass
 class LossSchedule:
     """Three-phase lambda curriculum (Eqs. 7-9 in the paper)."""
-    warmup_steps: int = 500       # T_warm: task-only before KD ramps in
+    warmup_steps: int = 1000      # T_warm: task-only before KD ramps in (was 500)
     geo_steps: int = 500          # T_geo: KD-only before geometry ramps in
     lambda3_max: float = 0.5      # cap on the geometry loss weight
+    lambda_kd_max: float = 0.5    # cap on KD loss weight (was implicitly 1.0)
     temperature: float = 4.0      # KD softmax temperature tau
+    gate_temp_start: float = 2.0  # gate softmax temperature at step 0, decays to 1.0
+    gate_entropy_alpha: float = 0.05  # entropy regularization to prevent gate collapse
 
     def lambdas(self, step: int) -> tuple[float, float, float]:
         """Return (lambda_task, lambda_kd, lambda_geo) at a given step."""
         l1 = 1.0
-        l2 = min(1.0, step / self.warmup_steps) if self.warmup_steps > 0 else 1.0
+        l2 = (self.lambda_kd_max * min(1.0, step / self.warmup_steps)
+              if self.warmup_steps > 0 else self.lambda_kd_max)
         if step <= self.warmup_steps:
             l3 = 0.0
         else:
             prog = (step - self.warmup_steps) / max(1, self.geo_steps)
             l3 = min(self.lambda3_max, prog * self.lambda3_max)
         return l1, l2, l3
+
+    def gate_temperature(self, step: int) -> float:
+        """Linear decay from gate_temp_start → 1.0 over warmup_steps."""
+        if self.gate_temp_start <= 1.0 or step >= self.warmup_steps:
+            return 1.0
+        progress = step / self.warmup_steps
+        return self.gate_temp_start - (self.gate_temp_start - 1.0) * progress
 
 
 @dataclass

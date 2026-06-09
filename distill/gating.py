@@ -37,11 +37,11 @@ class GatingNetwork(nn.Module):
         nn.init.zeros_(self.fc.weight)
         nn.init.zeros_(self.fc.bias)
 
-    def forward(self, student_mean_h: torch.Tensor) -> torch.Tensor:
+    def forward(self, student_mean_h: torch.Tensor, temperature: float = 1.0) -> torch.Tensor:
         if student_mean_h.dim() == 2:
             student_mean_h = student_mean_h.mean(dim=0)   # pool over batch
         logits = self.fc(student_mean_h)
-        return torch.softmax(logits, dim=-1)
+        return torch.softmax(logits / max(temperature, 1e-6), dim=-1)
 
 
 class TeacherProjections(nn.Module):

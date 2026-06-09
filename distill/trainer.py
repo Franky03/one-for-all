@@ -100,9 +100,11 @@ class OFATrainer:
         s_hidden_all = s_out.hidden_states  # tuple: (L_s+1) x (B, T_s, d_s)
 
         # gating from the masked-mean last hidden state, per sequence -> (B, d_s);
-        # the gating net pools over the batch internally. Upcast to fp32: the
-        # student runs in bf16 but the gating Linear is fp32.
-        gate = self.gating(masked_mean(s_hidden_all[-1], s_mask).float())   # (N,)
+        # temperature decays from gate_temp_start → 1.0 over warmup_steps to
+        # keep the gate soft early when gradients are still unstable.
+        gate_temp = self.cfg.schedule.gate_temperature(step)
+        gate = self.gating(masked_mean(s_hidden_all[-1], s_mask).float(),
+                           temperature=gate_temp)   # (N,)
 
         lambdas = self.cfg.schedule.lambdas(step)
         l2, l3 = lambdas[1], lambdas[2]
@@ -143,6 +145,7 @@ class OFATrainer:
             lambdas,
             qwen_logits=qwen_logits,
             temperature=self.cfg.schedule.temperature,
+            gate_entropy_alpha=self.cfg.schedule.gate_entropy_alpha,
         )
 
         # ---- backward ----

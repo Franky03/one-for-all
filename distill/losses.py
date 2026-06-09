@@ -161,15 +161,15 @@ def composite_loss(student_logits, labels,
                    gate, projections, monitored_layers,
                    lambdas: tuple[float, float, float],
                    qwen_logits=None,
-                   temperature: float = 4.0):
+                   temperature: float = 4.0,
+                   gate_entropy_alpha: float = 0.0):
     """
     Assemble the objective. Returns (loss_tensor, LossComponents).
 
-    l1 * L_task + l2 * L_KL(qwen) + l3 * L_geo
+    l1 * L_task + l2 * L_KL(qwen) + l3 * L_geo - alpha * H(gate)
 
-    L_KL uses only Qwen2.5-1.5B (same tokenizer as student → same vocab, no
-    alignment needed). Multi-teacher geometry flows through the gated CKA term.
-    Geometry skipped when l3 == 0 (warmup), KL skipped when qwen_logits is None.
+    H(gate) entropy term prevents gate collapse: maximizing entropy keeps the
+    gate from betting everything on one teacher early in training.
     """
     l1, l2, l3 = lambdas
 
@@ -187,6 +187,13 @@ def composite_loss(student_logits, labels,
         lgeo = student_logits.new_zeros(())
 
     loss = l1 * lt + l2 * lkd + l3 * lgeo
+
+    # entropy regularization: H(gate) = -sum(p * log(p)) >= 0
+    # subtracting it from loss = maximizing entropy = preventing collapse
+    if gate_entropy_alpha > 0:
+        entropy = -(gate * gate.clamp(min=1e-8).log()).sum()
+        loss = loss - gate_entropy_alpha * entropy
+
     comps = LossComponents(
         total=float(loss.detach()), task=float(lt.detach()),
         kd=float(lkd.detach()), geo=float(lgeo.detach()),

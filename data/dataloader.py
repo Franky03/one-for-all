@@ -70,31 +70,29 @@ def make_dataloader(cfg: OFAConfig, tokenizer) -> Callable[[], Iterator[dict]]:
 
     def gen() -> Iterator[dict]:
         batch_texts, batch_tasks = [], []
-        for ex in combined:
-            text = _extract_text(ex)
-            if not text:
-                continue
-            batch_texts.append(text)
-            batch_tasks.append(_tag_task(text))
-            if len(batch_texts) == cfg.batch_size:
-                enc = tokenizer(batch_texts, return_tensors="pt",
-                                padding=True, truncation=True,
-                                max_length=cfg.max_seq_len)
-                input_ids = enc.input_ids.cuda()
-                attention_mask = enc.attention_mask.cuda()
-                labels = input_ids.clone()
-                labels[enc.attention_mask == 0] = -100
-                yield {
-                    "input_ids": input_ids,
-                    "attention_mask": attention_mask,
-                    "labels": labels,
-                    # raw text rides along so each teacher can re-tokenize with
-                    # its OWN tokenizer (tokenizer-agnostic geometry distillation)
-                    "texts": list(batch_texts),
-                    # majority task in the batch (simple, robust)
-                    "task_label": max(set(batch_tasks), key=batch_tasks.count),
-                }
-                batch_texts, batch_tasks = [], []
+        while True:  # restart stream when exhausted; trainer breaks on train_steps
+            for ex in combined:
+                text = _extract_text(ex)
+                if not text:
+                    continue
+                batch_texts.append(text)
+                batch_tasks.append(_tag_task(text))
+                if len(batch_texts) == cfg.batch_size:
+                    enc = tokenizer(batch_texts, return_tensors="pt",
+                                    padding=True, truncation=True,
+                                    max_length=cfg.max_seq_len)
+                    input_ids = enc.input_ids.cuda()
+                    attention_mask = enc.attention_mask.cuda()
+                    labels = input_ids.clone()
+                    labels[enc.attention_mask == 0] = -100
+                    yield {
+                        "input_ids": input_ids,
+                        "attention_mask": attention_mask,
+                        "labels": labels,
+                        "texts": list(batch_texts),
+                        "task_label": max(set(batch_tasks), key=batch_tasks.count),
+                    }
+                    batch_texts, batch_tasks = [], []
 
     return gen
 

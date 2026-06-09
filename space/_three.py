@@ -9,6 +9,7 @@ across rebuilds via localStorage so the view doesn't reset on each probe.
 """
 from __future__ import annotations
 
+import html as _html
 import json
 import numpy as np
 
@@ -44,6 +45,25 @@ def build_iframe_tag(ts: str = "0") -> str:
     """Iframe pointing to /ofa-canvas with cache-busting timestamp."""
     return (
         f'<iframe src="/ofa-canvas?v={ts}" '
+        f'style="width:100%;height:520px;border:none;border-radius:8px;display:block;">'
+        f'</iframe>'
+    )
+
+
+def build_iframe_srcdoc(viz: dict, coords3d: "np.ndarray | None",
+                        probe_points: list[dict]) -> str:
+    """Embed the full standalone page in an iframe via srcdoc.
+
+    Scripts injected straight into gr.HTML never run: when Gradio sets
+    innerHTML, the HTML5 spec says <script> tags are parsed but NOT executed.
+    An iframe's srcdoc spins up a fresh document that DOES execute its scripts,
+    so the Three.js renderer actually runs. The page string is HTML-escaped
+    because srcdoc is an attribute value the browser decodes before parsing.
+    """
+    page = build_canvas_page(viz, coords3d, probe_points)
+    escaped = _html.escape(page, quote=True)
+    return (
+        f'<iframe srcdoc="{escaped}" '
         f'style="width:100%;height:520px;border:none;border-radius:8px;display:block;">'
         f'</iframe>'
     )

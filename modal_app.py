@@ -54,7 +54,7 @@ VOL_PATH = "/vol"
     secrets=[modal.Secret.from_name("huggingface")],
 )
 def train_ofa(steps: int = 5000, batch_size: int = 8, max_seq_len: int = 512,
-              warmup_steps: int = 500, geo_steps: int = 500):
+              warmup_steps: int = 1000, geo_steps: int = 500):
     """
     Run the full One for All training loop on GPU and save to the volume.
 
@@ -353,6 +353,6 @@ def benchmark(
 
 @app.local_entrypoint()
 def main(steps: int = 5000, batch_size: int = 8, max_seq_len: int = 512,
-         warmup_steps: int = 500, geo_steps: int = 500):
+         warmup_steps: int = 1000, geo_steps: int = 500):
     train_ofa.remote(steps=steps, batch_size=batch_size, max_seq_len=max_seq_len,
                      warmup_steps=warmup_steps, geo_steps=geo_steps)
