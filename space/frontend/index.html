@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>One for All — the strength of many, carried by one</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    /* ── ink base (deep, cool, near-black) ── */
+    --ink-0: oklch(0.155 0.012 264);
+    --ink-1: oklch(0.195 0.013 264);
+    --ink-2: oklch(0.235 0.014 264);
+    --line:      oklch(0.42 0.02 264 / 0.42);
+    --line-soft: oklch(0.42 0.02 264 / 0.20);
+
+    --text:       oklch(0.955 0.008 85);
+    --text-dim:   oklch(0.72 0.012 264);
+    --text-faint: oklch(0.56 0.012 264);
+
+    /* ── the one warm accent (inherited light / the student) ── */
+    --spark:      oklch(0.83 0.125 74);
+    --spark-deep: oklch(0.74 0.135 66);
+    --spark-soft: oklch(0.83 0.125 74 / 0.13);
+    --spark-line: oklch(0.83 0.125 74 / 0.30);
+
+    /* ── 6 teachers: one family, lightness+chroma fixed, hue varies ── */
+    --t-qwen:    oklch(0.76 0.115 252);
+    --t-smollm:  oklch(0.76 0.115 200);
+    --t-phi:     oklch(0.76 0.115 156);
+    --t-gemma:   oklch(0.76 0.115 122);
+    --t-minicpm: oklch(0.76 0.115 38);
+    --t-nemo:    oklch(0.76 0.115 322);
+
+    --serif: "Instrument Serif", Georgia, "Times New Roman", serif;
+    --ui: "Hanken Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+    --maxw: 1180px;
+    --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--ink-0);
+    color: var(--text);
+    font-family: var(--ui);
+    font-size: 16px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+  }
+
+  /* layered ambient field — fixed, gets parallax via JS */
+  .ambient {
+    position: fixed; inset: -10% -10% -10% -10%;
+    z-index: 0; pointer-events: none;
+    background:
+      radial-gradient(42% 38% at 22% 14%, oklch(0.76 0.115 252 / 0.10), transparent 70%),
+      radial-gradient(40% 36% at 82% 8%,  var(--spark-soft), transparent 72%),
+      radial-gradient(50% 46% at 60% 96%, oklch(0.76 0.115 322 / 0.07), transparent 74%);
+    will-change: transform;
+  }
+  .grain {
+    position: fixed; inset: 0; z-index: 1; pointer-events: none;
+    opacity: 0.035; mix-blend-mode: screen;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  ::-webkit-scrollbar { width: 11px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--ink-2); border-radius: 99px; border: 3px solid var(--ink-0); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--spark-deep); }
+  ::selection { background: var(--spark-soft); color: var(--text); }
+
+  /* ── top bar ── */
+  .topbar {
+    position: sticky; top: 0; z-index: 40;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px clamp(20px, 4vw, 40px);
+    backdrop-filter: blur(14px) saturate(1.2);
+    background: linear-gradient(180deg, oklch(0.155 0.012 264 / 0.86), oklch(0.155 0.012 264 / 0.4));
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .mark {
+    font-family: var(--serif); font-size: 30px; line-height: 1;
+    color: var(--spark);
+    text-shadow: 0 0 22px var(--spark-line);
+    transform: translateY(-1px);
+  }
+  .brand .name { font-weight: 600; letter-spacing: -0.01em; font-size: 16px; white-space: nowrap; }
+  .brand .name b { font-weight: 600; }
+  .stat-row { display: flex; align-items: center; gap: 18px; }
+  .stat {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em;
+    color: var(--text-faint); display: flex; align-items: center; gap: 7px;
+    text-transform: uppercase;
+  }
+  .stat .d { width: 6px; height: 6px; border-radius: 50%; }
+  .stat .d.s { background: var(--spark); box-shadow: 0 0 8px var(--spark); }
+  .stat .d.t { background: var(--t-qwen); box-shadow: 0 0 8px var(--t-qwen); }
+  .stat b { color: var(--text-dim); font-weight: 500; }
+  @media (max-width: 760px){ .stat-row .stat:last-child { display: none; } }
+
+  /* ── shared layout ── */
+  .wrap { position: relative; z-index: 2; max-width: var(--maxw); margin: 0 auto; padding: 0 clamp(20px, 4vw, 40px); }
+  .eyebrow {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.28em;
+    text-transform: uppercase; color: var(--text-faint);
+  }
+
+  /* ── HERO ── */
+  .hero { position: relative; padding: clamp(56px, 11vh, 130px) 0 clamp(40px, 7vh, 90px); }
+  .hero-grid {
+    display: grid; grid-template-columns: 1.05fr 0.95fr; gap: clamp(24px, 5vw, 64px);
+    align-items: center;
+  }
+  .hero h1 {
+    font-family: var(--serif); font-weight: 400;
+    font-size: clamp(46px, 7.6vw, 104px); line-height: 0.96;
+    letter-spacing: -0.015em; margin: 18px 0 0;
+  }
+  .hero h1 .em { font-style: italic; color: var(--spark); }
+  .hero .lede {
+    margin: 26px 0 0; max-width: 30em;
+    font-size: clamp(16px, 1.5vw, 19px); line-height: 1.62; color: var(--text-dim);
+  }
+  .hero .lede b { color: var(--text); font-weight: 600; }
+  .hero-cta { display: flex; align-items: center; gap: 18px; margin-top: 34px; flex-wrap: wrap; }
+  .btn {
+    appearance: none; border: 0; cursor: pointer; font-family: var(--ui);
+    font-weight: 600; font-size: 15px; letter-spacing: 0.005em;
+    padding: 13px 22px; border-radius: 99px;
+    display: inline-flex; align-items: center; gap: 10px;
+    transition: transform .25s var(--ease), box-shadow .25s var(--ease), background .2s;
+  }
+  .btn-spark {
+    color: oklch(0.2 0.04 70);
+    background: linear-gradient(180deg, var(--spark), var(--spark-deep));
+    box-shadow: 0 1px 0 oklch(1 0 0 / 0.3) inset, 0 10px 30px -10px var(--spark-deep);
+  }
+  .btn-spark:hover { transform: translateY(-2px); box-shadow: 0 1px 0 oklch(1 0 0 / 0.3) inset, 0 16px 36px -12px var(--spark-deep); }
+  .btn-ghost { color: var(--text-dim); background: transparent; border: 1px solid var(--line); }
+  .btn-ghost:hover { color: var(--text); border-color: var(--text-faint); }
+  .btn .arrow { font-family: var(--mono); }
+
+  /* convergence diagram */
+  .converge { position: relative; aspect-ratio: 1 / 1; width: 100%; }
+  .converge svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  .converge .tlabel {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em; fill: var(--text-dim);
+  }
+  .thread { fill: none; stroke-width: 1.4; opacity: 0.5; }
+  .thread-flow { fill: none; stroke-width: 1.6; stroke-dasharray: 2 13; stroke-linecap: round; }
+  @keyframes flow { to { stroke-dashoffset: -150; } }
+  .core-ring { animation: spinSlow 38s linear infinite; transform-origin: 300px 300px; }
+  @keyframes spinSlow { to { transform: rotate(360deg); } }
+  @keyframes breathe { 0%,100% { opacity: .55; r: 30; } 50% { opacity: .9; r: 36; } }
+  .core-halo { animation: breathe 4.5s ease-in-out infinite; }
+  .tnode { transition: r .3s var(--ease); }
+
+  .scrollcue {
+    margin-top: clamp(34px, 6vh, 70px); display: flex; align-items: center; gap: 12px;
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--text-faint);
+  }
+  .scrollcue .ln { width: 46px; height: 1px; background: var(--line); position: relative; overflow: hidden; }
+  .scrollcue .ln::after { content:""; position:absolute; inset:0; width:40%; background: var(--spark); animation: cue 2.6s var(--ease) infinite; }
+  @keyframes cue { 0%{ transform: translateX(-120%);} 60%,100%{ transform: translateX(320%);} }
+
+  /* ── reveal ── */
+  .reveal { opacity: 0; transform: translateY(26px); transition: opacity .9s var(--ease), transform .9s var(--ease); }
+  .reveal.in { opacity: 1; transform: none; }
+
+  /* ── section heading ── */
+  .section { padding: clamp(60px, 11vh, 130px) 0; position: relative; }
+  .sec-head { max-width: 40em; margin-bottom: 40px; }
+  .sec-head h2 {
+    font-family: var(--serif); font-weight: 400; font-size: clamp(30px, 4.4vw, 50px);
+    line-height: 1.04; letter-spacing: -0.01em; margin: 14px 0 0;
+  }
+  .sec-head p { color: var(--text-dim); margin: 16px 0 0; font-size: 17px; max-width: 34em; }
+
+  /* ── ask panel ── */
+  .ask-shell {
+    display: grid; grid-template-columns: 1.55fr 1fr; gap: 22px;
+  }
+  .card {
+    background: linear-gradient(180deg, oklch(0.205 0.013 264 / 0.7), oklch(0.18 0.012 264 / 0.7));
+    border: 1px solid var(--line-soft);
+    border-radius: 18px;
+    padding: 22px;
+    position: relative;
+  }
+  .seg {
+    display: inline-flex; padding: 3px; gap: 2px;
+    background: var(--ink-0); border: 1px solid var(--line-soft); border-radius: 99px;
+    margin-bottom: 18px;
+  }
+  .seg button {
+    appearance: none; border: 0; background: transparent; cursor: pointer;
+    font-family: var(--ui); font-weight: 600; font-size: 13px;
+    color: var(--text-faint); padding: 7px 16px; border-radius: 99px;
+    transition: color .2s, background .2s;
+  }
+  .seg button[aria-pressed="true"] { background: var(--ink-2); color: var(--text); }
+
+  .ask-box {
+    width: 100%; min-height: 96px; resize: vertical;
+    background: var(--ink-0); border: 1px solid var(--line-soft);
+    border-radius: 12px; padding: 15px 16px;
+    color: var(--text); font-family: var(--ui); font-size: 16px; line-height: 1.5;
+    outline: none; transition: border-color .2s, box-shadow .2s;
+  }
+  .ask-box:focus { border-color: var(--spark-line); box-shadow: 0 0 0 4px var(--spark-soft); }
+  .ask-box::placeholder { color: var(--text-faint); }
+
+  .ask-row { display: flex; align-items: center; justify-content: flex-end; gap: 14px; margin-top: 14px; flex-wrap: wrap; }
+  .run-hint { margin-right: auto; font-family: var(--mono); font-size: 11px; color: var(--text-faint); letter-spacing: 0.04em; display: flex; align-items: center; gap: 6px; }
+  .run-hint .kbd { border: 1px solid var(--line-soft); border-bottom-width: 2px; border-radius: 4px; padding: 1px 6px; color: var(--text-dim); background: var(--ink-0); }
+
+  /* example questions — visible list */
+  .examples-block { margin-top: 22px; }
+  .examples-label { font-family: var(--mono); font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--text-faint); }
+  .examples { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 1px; border: 1px solid var(--line-soft); border-radius: 12px; overflow: hidden; }
+  .chip {
+    appearance: none; cursor: pointer; width: 100%; text-align: left;
+    font-family: var(--ui); font-size: 14.5px; color: var(--text-dim);
+    background: oklch(0.205 0.013 264 / 0.4); border: 0;
+    padding: 13px 15px; display: flex; align-items: center; gap: 12px;
+    transition: color .18s, background .18s, padding .18s var(--ease);
+  }
+  .chip + .chip { border-top: 1px solid var(--line-soft); }
+  .chip .ix { font-family: var(--mono); font-size: 11px; color: var(--text-faint); flex-shrink: 0; transition: color .18s; }
+  .chip .qt { flex: 1; }
+  .chip .go { font-family: var(--mono); color: var(--spark); opacity: 0; transform: translateX(-6px); transition: opacity .18s, transform .18s var(--ease); flex-shrink: 0; }
+  .chip:hover { color: var(--text); background: oklch(0.235 0.014 264 / 0.7); padding-left: 19px; }
+  .chip:hover .ix { color: var(--spark); }
+  .chip:hover .go { opacity: 1; transform: none; }
+
+  .ask-btn {
+    appearance: none; border: 0; cursor: pointer; flex-shrink: 0;
+    font-family: var(--ui); font-weight: 700; font-size: 15px;
+    color: oklch(0.2 0.04 70);
+    background: linear-gradient(180deg, var(--spark), var(--spark-deep));
+    padding: 12px 24px; border-radius: 12px;
+    display: inline-flex; align-items: center; gap: 12px;
+    box-shadow: 0 1px 0 oklch(1 0 0 / 0.3) inset, 0 10px 26px -12px var(--spark-deep);
+    transition: transform .2s var(--ease), filter .2s;
+  }
+  .ask-btn:hover { transform: translateY(-1px); filter: brightness(1.04); }
+  .ask-btn small { font-family: var(--mono); font-weight: 400; font-size: 10.5px; opacity: 0.7; letter-spacing: 0.04em; }
+  .ask-btn.busy { animation: pulseBtn 1.1s ease-in-out infinite; }
+  @keyframes pulseBtn { 0%,100%{ filter: brightness(1);} 50%{ filter: brightness(1.18);} }
+
+  /* answers */
+  .answers { margin-top: 22px; display: grid; gap: 16px; }
+  .answers.compare { grid-template-columns: 1fr 1fr; }
+  .ans {
+    border: 1px solid var(--line-soft); border-radius: 12px; padding: 16px;
+    background: var(--ink-0);
+  }
+  .ans .tag {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase;
+    display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
+  }
+  .ans.before .tag { color: var(--text-faint); }
+  .ans.after  .tag { color: var(--spark); }
+  .ans .tag .d { width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 8px currentColor; }
+  .ans .body { font-size: 14.5px; line-height: 1.6; color: var(--text-dim); white-space: pre-wrap; min-height: 3em; }
+  .ans.after .body { color: var(--text); }
+  .ans.before { opacity: 0.72; }
+  .ans .body .caret { color: var(--spark); animation: blink 1s step-end infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .placeholder-note { color: var(--text-faint); font-size: 13.5px; font-style: italic; }
+  @media (max-width: 640px){ .answers.compare { grid-template-columns: 1fr; } }
+
+  /* teacher influence */
+  .influence .head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
+  .influence .head .ttl { font-family: var(--mono); font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--text-faint); }
+  .influence > p { color: var(--text-dim); font-size: 13.5px; margin: 0 0 20px; }
+  .inf-rows { display: flex; flex-direction: column; gap: 15px; }
+  .inf-row { display: grid; grid-template-columns: 78px 1fr 34px; align-items: center; gap: 12px; }
+  .inf-row .nm { font-family: var(--mono); font-size: 12.5px; }
+  .inf-row .track { height: 5px; border-radius: 99px; background: oklch(0.3 0.01 264 / 0.5); overflow: hidden; position: relative; }
+  .inf-row .fill { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 99px; background: currentColor; box-shadow: 0 0 10px currentColor; transition: width 1s var(--ease); }
+  .inf-row .pc { font-family: var(--mono); font-size: 11.5px; color: var(--text-faint); text-align: right; }
+  .inf-foot { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line-soft);
+    font-family: var(--mono); font-size: 11px; color: var(--text-faint); display: flex; align-items: center; gap: 8px; }
+  .inf-foot .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--spark); box-shadow: 0 0 8px var(--spark); }
+
+  /* ── thought map ── */
+  .map-stage {
+    position: relative; height: clamp(440px, 64vh, 680px);
+    border-radius: 22px; overflow: hidden;
+    border: 1px solid var(--line-soft);
+    background:
+      radial-gradient(60% 60% at 50% 50%, oklch(0.2 0.013 264 / 0.5), transparent 75%),
+      var(--ink-0);
+  }
+  .map-stage .vignette { position: absolute; inset: 0; pointer-events: none;
+    box-shadow: inset 0 0 140px 30px oklch(0.13 0.01 264 / 0.9); }
+  .map-layer { position: absolute; inset: 0; will-change: transform; }
+  .dot {
+    position: absolute; border-radius: 50%; transform: translate(-50%, -50%);
+    box-shadow: 0 0 10px currentColor; will-change: transform;
+  }
+  .dot.probe { background: var(--text); color: var(--text); }
+  .dot.probe::after { content:""; position:absolute; inset:-7px; border-radius:50%; border:1px solid var(--text); opacity:0; animation: ping 1.6s var(--ease) 2; }
+  @keyframes ping { 0%{ transform: scale(.4); opacity:.8;} 100%{ transform: scale(1.6); opacity:0; } }
+  .map-legend {
+    position: absolute; left: 20px; bottom: 18px; z-index: 3;
+    display: flex; flex-wrap: wrap; gap: 14px;
+  }
+  .map-legend .lg { display: flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
+  .map-legend .lg .s { width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 7px currentColor; background: currentColor; }
+  .map-cap { position: absolute; top: 20px; left: 22px; z-index: 3; max-width: 30em; }
+  .map-cap .t { font-family: var(--mono); font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--text-faint); }
+  .map-cap p { margin: 8px 0 0; color: var(--text-dim); font-size: 14px; }
+
+  /* ── footer ── */
+  footer { position: relative; z-index: 2; border-top: 1px solid var(--line-soft); margin-top: 40px; }
+  .foot-in { max-width: var(--maxw); margin: 0 auto; padding: 30px clamp(20px,4vw,40px);
+    display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+  .foot-in .tag { font-family: var(--serif); font-size: 22px; color: var(--text-dim); }
+  .foot-in .tag .em { font-style: italic; color: var(--spark); }
+  .foot-links { display: flex; gap: 22px; font-family: var(--mono); font-size: 12px; }
+  .foot-links a { color: var(--text-faint); text-decoration: none; transition: color .2s; }
+  .foot-links a:hover { color: var(--spark); }
+
+  @media (max-width: 900px){
+    .hero-grid { grid-template-columns: 1fr; }
+    .converge { max-width: 460px; margin: 8px auto 0; }
+    .ask-shell { grid-template-columns: 1fr; }
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; }
+    html { scroll-behavior: auto; }
+    .reveal { opacity: 1; transform: none; }
+  }
+</style>
+</head>
+<body>
+  <div class="ambient" id="ambient"></div>
+  <div class="grain"></div>
+
+  <!-- ── TOP BAR ── -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="name">One for <b>All</b></span>
+    </div>
+    <div class="stat-row">
+      <span class="stat"><span class="d s"></span>Student <b>· 0.5B</b></span>
+      <span class="stat" id="statTeachers"><span class="d t"></span>6 Teachers <b>· 1.5–4B</b></span>
+    </div>
+  </header>
+
+  <!-- ── HERO ── -->
+  <section class="hero">
+    <div class="wrap hero-grid">
+      <div class="hero-copy">
+        <span class="eyebrow">Multi-teacher distillation</span>
+        <h1>Six minds,<br />one&nbsp;<span class="em">student</span>.</h1>
+        <p class="lede">
+          Six specialist AIs pour what they know into a single half-billion-parameter
+          model — <b>the strength of many, carried by one.</b> Ask it anything and watch
+          the inheritance happen, live.
+        </p>
+        <div class="hero-cta">
+          <button class="btn btn-spark" data-scroll="#try">Ask the student <span class="arrow">↓</span></button>
+          <button class="btn btn-ghost" data-scroll="#map">See the thought map</button>
+        </div>
+        <div class="scrollcue"><span class="ln"></span> watch the transfer</div>
+      </div>
+
+      <!-- convergence diagram: 6 teachers → 1 student -->
+      <div class="converge" id="converge" aria-hidden="true">
+        <svg viewBox="0 0 600 600">
+          <defs>
+            <radialGradient id="coreG" cx="50%" cy="50%" r="50%">
+              <stop offset="0%"  stop-color="oklch(0.97 0.05 80)" />
+              <stop offset="45%" stop-color="var(--spark)" />
+              <stop offset="100%" stop-color="var(--spark-deep)" />
+            </radialGradient>
+            <filter id="soft" x="-60%" y="-60%" width="220%" height="220%">
+              <feGaussianBlur stdDeviation="7" />
+            </filter>
+          </defs>
+
+          <!-- threads + flow + nodes are injected by JS -->
+          <g id="threads"></g>
+          <g id="flows"></g>
+
+          <!-- student core -->
+          <circle class="core-halo" cx="300" cy="300" r="32" fill="var(--spark)" opacity="0.5" filter="url(#soft)" />
+          <g class="core-ring">
+            <circle cx="300" cy="300" r="58" fill="none" stroke="var(--spark-line)" stroke-width="1" stroke-dasharray="3 9" />
+          </g>
+          <circle cx="300" cy="300" r="17" fill="url(#coreG)" />
+          <circle cx="300" cy="300" r="17" fill="none" stroke="oklch(1 0 0 / 0.5)" stroke-width="1" />
+          <text x="300" y="345" text-anchor="middle" class="tlabel" style="fill: var(--spark); font-size: 12px; letter-spacing:0.12em;">STUDENT · 0.5B</text>
+
+          <g id="tnodes"></g>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── ASK / COMPARE ── -->
+  <section class="section" id="try">
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <span class="eyebrow">Live probe</span>
+        <h2>One prompt. Two answers.<br />Before the teachers, and after.</h2>
+        <p>The exact same 0.5-billion-parameter model — with and without what it learned from the
+           six teachers. Type a question, or pick one below.</p>
+      </div>
+
+      <div class="ask-shell reveal">
+        <!-- left: prompt + answers -->
+        <div class="card">
+          <div class="seg" role="group" aria-label="view mode">
+            <button data-mode="ask" aria-pressed="true">Ask</button>
+            <button data-mode="compare" aria-pressed="false">Compare before / after</button>
+          </div>
+
+          <textarea class="ask-box" id="ask" placeholder="Ask anything — a math problem, a science question, a bit of code…">Write a Python function that checks if a word is a palindrome.</textarea>
+
+          <div class="ask-row">
+            <span class="run-hint"><span class="kbd">⌘</span><span class="kbd">↵</span> to run</span>
+            <button class="ask-btn" id="askBtn">Ask <small>0.5B model</small></button>
+          </div>
+
+          <div class="examples-block">
+            <span class="examples-label">Or pick a question</span>
+            <ul class="examples" id="examples"></ul>
+          </div>
+
+          <div class="answers" id="answers">
+            <div class="ans after">
+              <div class="tag"><span class="d"></span>After · taught by 6 teachers</div>
+              <div class="body" id="bodyAfter"><span class="placeholder-note">Ask the student to see how its answer changes after distillation.</span></div>
+            </div>
+            <div class="ans before" id="beforeCard" hidden>
+              <div class="tag"><span class="d"></span>Before · plain base model</div>
+              <div class="body" id="bodyBefore"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- right: teacher influence -->
+        <div class="card influence">
+          <div class="head"><span class="ttl">Teacher influence</span></div>
+          <p>While the student answers, these bars show how much it leans on what each teacher taught it.</p>
+          <div class="inf-rows" id="infRows"></div>
+          <div class="inf-foot"><span class="dot"></span><span id="infNote">idle — waiting for a prompt</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── THOUGHT MAP ── -->
+  <section class="section" id="map">
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <span class="eyebrow">Representation space</span>
+        <h2>Where every mind keeps its thoughts.</h2>
+        <p>Each dot is how one model internally represents a piece of text. Teachers cluster by what
+           they're good at — and the student drifts toward all of them at once. Your prompts land here
+           as bright probes.</p>
+      </div>
+
+      <div class="map-stage reveal" id="mapStage">
+        <div class="map-cap">
+          <div class="t">Thought map</div>
+          <p>Move your cursor — the field has depth.</p>
+        </div>
+        <div class="map-layer" id="mapFar" data-depth="0.012"></div>
+        <div class="map-layer" id="mapMid" data-depth="0.028"></div>
+        <div class="map-layer" id="mapNear" data-depth="0.05"></div>
+        <div class="vignette"></div>
+        <div class="map-legend" id="mapLegend"></div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="foot-in">
+      <div class="tag">one for all — <span class="em">the strength of many, carried by one.</span></div>
+      <div class="foot-links">
+        <a href="https://huggingface.co/build-small-hackathon/deku" target="_blank" rel="noopener">model</a>
+        <a href="https://huggingface.co/build-small-hackathon/deku-gguf" target="_blank" rel="noopener">gguf</a>
+        <a href="https://huggingface.co/spaces/build-small-hackathon/one-for-all" target="_blank" rel="noopener">↗ space</a>
+      </div>
+    </div>
+  </footer>
+
+<script type="module" src="/static/app.js"></script>
+</body>
+</html>

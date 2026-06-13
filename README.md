@@ -2,15 +2,16 @@
 
 ![One for All demo](static/one_for_all.gif)
 
-Five teacher SLMs (1.5–3.8B) distill into one smaller student (0.5B) that learns
-to absorb each teacher's representation geometry. A gating network conditioned on
-the student's own hidden state decides, online, how much of each teacher to absorb.
+Six teacher SLMs (1.5–4B — Qwen2.5, SmolLM2, Phi-3.5, gemma-2, MiniCPM,
+Nemotron-Mini) distill into one smaller student (0.5B) that learns to absorb
+each teacher's representation geometry. A gating network conditioned on the
+student's own hidden state decides, online, how much of each teacher to absorb.
 
 **Loss:** `L = λ1·L_task + λ2·L_KL(qwen) + λ3·L_geo(gated CKA)`
 
 **Path B — geometry-only, tokenizer-agnostic.** KL distillation uses only the
 Qwen teacher (same tokenizer as student → no vocab mismatch). Geometry distillation
-uses all 5 teachers via masked-mean pooling (sequence-level, tokenizer-agnostic).
+uses all 6 teachers via masked-mean pooling (sequence-level, tokenizer-agnostic).
 
 ---
 
@@ -76,6 +77,26 @@ modal run ofa/modal_app.py --steps 6 --warmup-steps 2 --batch-size 4
 ```
 
 Checkpoints saved to Modal volume `ofa-student` every 500 steps.
+
+---
+
+## Export GGUF (llama.cpp — após o treino)
+
+Merge do LoRA + conversão para GGUF (f16 + q8_0) + `gating.npz` (gate em numpy).
+Roda em CPU no Modal:
+
+```bash
+cd /home/kai
+
+# salva no volume em ofa_student/gguf/
+modal run ofa/modal_app.py::export_gguf
+
+# salva e publica em build-small-hackathon/deku-gguf
+modal run ofa/modal_app.py::export_gguf --push
+```
+
+Para o Space servir via llama.cpp (CPU, sem ZeroGPU): setar `OFA_BACKEND=llamacpp`
+em **Settings → Variables and secrets** do Space.
 
 ---
 
@@ -177,5 +198,8 @@ then **Factory reboot** so it picks up the new viz data and model.
 | `_data.py` | Load `viz_data.json` from HF dataset, fit 3D UMAP at startup. |
 | `_fig.py` | Plotly figures: UMAP 3D, CKA heatmap, loss curves, gate area. |
 | `_html.py` | Gate bars, task badge, header. |
-| `_probe.py` | `load_student` + `run_probe` (inlined, no `ofa` package dependency). |
-| `app.py` | Gradio wiring: 3 tabs, `@spaces.GPU` probe handler, `gr.State` for probe points. |
+| `_probe.py` | Student loading + probe + token streaming, torch and llama.cpp backends. |
+| `_boot.py` | Shared runtime (viz + UMAP + student) and backend dispatch for both UIs. |
+| `server_app.py` | **Main entrypoint** — `gr.Server` API + custom frontend (`frontend/`). |
+| `frontend/` | Custom UI: Three.js soul space, streaming console, quirk meters. |
+| `app.py` | Legacy Gradio Blocks UI (4 tabs incl. Arena) — kept as fallback. |

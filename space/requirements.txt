@@ -1,11 +1,18 @@
-gradio==5.33.2
+# Pins validated end-to-end. transformers>=5 is required: gradio 6.18 pulls
+# huggingface_hub>=1.0, which transformers<5 forbids (ResolutionImpossible on the
+# Spaces builder). The Space only loads the Qwen student — none of the remote-code
+# teachers — so it doesn't need the training image's transformers<5.
+gradio>=6.18
 plotly>=5.20
-umap-learn>=0.5
+umap-learn==0.5.12
 numpy
 torch>=2.1
-transformers>=4.44,<5
-peft>=0.11
+transformers>=5.0
+peft>=0.19
 accelerate>=0.30
 spaces
-huggingface_hub>=0.22
+huggingface_hub>=1.0
 trimesh>=4.0
+# To run the GGUF student on CPU instead (OFA_BACKEND=llamacpp), add:
+#   --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+#   llama-cpp-python

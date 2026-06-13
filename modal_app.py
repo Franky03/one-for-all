@@ -166,7 +166,7 @@ def _probe_texts() -> list[str]:
 @app.function(
     gpu="A10G",
     volumes={VOL_PATH: volume},
-    timeout=60 * 30,
+    timeout=60 * 90,   # 6 teachers + Nemotron download + 256k-vocab forward > 30min
     secrets=[modal.Secret.from_name("huggingface")],
 )
 def export_viz(ckpt: str = "final", probe_size: int = 24):
@@ -278,6 +278,149 @@ def export_viz(ckpt: str = "final", probe_size: int = 24):
           f"(embeddings: {len(embeddings)} models × {len(all_labels)} pts, "
           f"cka {len(cka['models'])}×{len(cka['models'])}, "
           f"curves {len(curves.get('steps', []))} steps)")
+
+
+# ----------------------------------------------------------------- gguf export
+# Separate CPU image: llama.cpp's HF→GGUF converter + its python deps.
+# No cmake build needed — convert_hf_to_gguf.py emits q8_0 directly.
+gguf_image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .apt_install("git")
+    .pip_install(
+        "torch>=2.1",
+        "transformers>=4.44,<5",
+        "peft>=0.11",
+        "accelerate>=0.30",
+        "huggingface_hub>=0.22",
+        "numpy",
+        "sentencepiece",
+    )
+    .run_commands(
+        "git clone --depth 1 https://github.com/ggml-org/llama.cpp /llama.cpp",
+        "pip install -r /llama.cpp/requirements/requirements-convert_hf_to_gguf.txt",
+    )
+    .add_local_python_source("ofa")
+)
+
+
+@app.function(
+    image=gguf_image,
+    volumes={VOL_PATH: volume},
+    timeout=60 * 30,
+    secrets=[modal.Secret.from_name("huggingface")],
+)
+def export_gguf(ckpt: str = "final", push: bool = False,
+                repo: str = "build-small-hackathon/deku-gguf"):
+    """
+    Merge the LoRA adapter into the base student, convert to GGUF (f16 + q8_0)
+    and export the gating network as numpy — everything the Space's llama.cpp
+    backend (OFA_BACKEND=llamacpp) needs. CPU-only, ~minutes for a 0.5B.
+
+    Saved to the volume under ofa_student/gguf/. Pushing stays opt-in:
+
+        modal run ofa/modal_app.py::export_gguf
+        modal run ofa/modal_app.py::export_gguf --push   # → deku-gguf repo
+    """
+    import os
+    import subprocess
+    import numpy as np
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    from peft import PeftModel
+
+    from ofa.config import OFAConfig
+
+    cfg = OFAConfig()
+    out_dir = f"{VOL_PATH}/ofa_student"
+    ckpt_dir = f"{out_dir}/{ckpt}"
+    gguf_dir = f"{out_dir}/gguf"
+    os.makedirs(gguf_dir, exist_ok=True)
+
+    # 1. merge LoRA into the base (0.5B — CPU is fine)
+    merged_dir = "/tmp/deku-merged"
+    base = AutoModelForCausalLM.from_pretrained(
+        cfg.student.model_id, dtype=torch.bfloat16)
+    merged = PeftModel.from_pretrained(base, ckpt_dir).merge_and_unload()
+    merged.save_pretrained(merged_dir)
+    AutoTokenizer.from_pretrained(ckpt_dir).save_pretrained(merged_dir)
+    print(f"[gguf] merged LoRA → {merged_dir}")
+
+    # 2. convert: f16 (archival) + q8_0 (what the Space serves)
+    for outtype in ("f16", "q8_0"):
+        outfile = f"{gguf_dir}/deku-{outtype}.gguf"
+        subprocess.run(
+            ["python", "/llama.cpp/convert_hf_to_gguf.py", merged_dir,
+             "--outfile", outfile, "--outtype", outtype],
+            check=True,
+        )
+        print(f"[gguf] wrote {outfile} ({os.path.getsize(outfile) / 1e6:.0f} MB)")
+
+    # 3. gating → numpy so the llama.cpp backend gates without torch
+    sd = torch.load(f"{ckpt_dir}/gating.pt", map_location="cpu")
+    np.savez(f"{gguf_dir}/gating.npz",
+             weight=sd["fc.weight"].float().numpy(),
+             bias=sd["fc.bias"].float().numpy())
+    print(f"[gguf] wrote gating.npz (n_teachers={sd['fc.weight'].shape[0]})")
+    volume.commit()
+
+    if push:
+        from huggingface_hub import HfApi
+        api = HfApi()
+        api.create_repo(repo, exist_ok=True)
+        api.upload_folder(folder_path=gguf_dir, repo_id=repo,
+                          commit_message=f"GGUF export from {ckpt}")
+        print(f"[gguf] pushed → https://huggingface.co/{repo}")
+
+
+# ----------------------------------------------------------------- gguf validate
+# Mirrors space/_probe.py's llama.cpp path so we can prove the runtime (embed
+# dim, gate, streaming) against the published GGUF before flipping the Space.
+gguf_run_image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .pip_install(
+        "llama-cpp-python",
+        extra_index_url="https://abetlen.github.io/llama-cpp-python/whl/cpu",
+    )
+    .pip_install("huggingface_hub>=0.22", "numpy")
+)
+
+
+@app.function(image=gguf_run_image, timeout=60 * 15,
+              secrets=[modal.Secret.from_name("huggingface")])
+def validate_gguf(repo: str = "build-small-hackathon/deku-gguf"):
+    import numpy as np
+    from llama_cpp import Llama
+    from huggingface_hub import hf_hub_download
+
+    gguf = hf_hub_download(repo, "deku-q8_0.gguf")
+    npz = np.load(hf_hub_download(repo, "gating.npz"))
+    W, b = npz["weight"].astype(np.float32), npz["bias"].astype(np.float32)
+    print(f"[validate] gate weight {W.shape} bias {b.shape}")
+
+    # embedding instance → gate
+    emb = Llama(model_path=gguf, embedding=True, n_ctx=2048, verbose=False)
+    raw = np.asarray(emb.embed("Name the capital of Japan.", normalize=False),
+                     dtype=np.float32)
+    print(f"[validate] raw embed shape {raw.shape}")
+    e = raw.mean(axis=0) if raw.ndim == 2 else raw      # pool if per-token
+    print(f"[validate] pooled embed dim {e.shape} (gate expects {W.shape[1]})")
+    assert e.shape[0] == W.shape[1], "embed dim != gate input dim"
+    z = W @ e + b
+    g = np.exp(z - z.max()); g = g / g.sum()
+    print(f"[validate] gate = {[round(float(x), 3) for x in g]} sum={g.sum():.3f}")
+
+    # generation instance → streaming
+    gen = Llama(model_path=gguf, n_ctx=2048, verbose=False)
+    pieces = []
+    for chunk in gen.create_chat_completion(
+        messages=[{"role": "user", "content": "Name the capital of Japan."}],
+        max_tokens=40, temperature=0.0, stream=True,
+    ):
+        d = chunk["choices"][0]["delta"].get("content")
+        if d:
+            pieces.append(d)
+    print(f"[validate] generation: {''.join(pieces)!r}")
+    print("[validate] OK ✓")
 
 
 # ----------------------------------------------------------------- benchmark

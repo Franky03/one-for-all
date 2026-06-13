@@ -30,6 +30,7 @@ _COLORS_RGB: list[tuple[int, int, int]] = [
     (245, 158,  11),  # teacher2 — #f59e0b
     ( 52, 211, 153),  # teacher3 — #34d399
     (244, 114, 182),  # teacher4 — #f472b6
+    (118, 185,   0),  # teacher5 — #76b900 (nemotron / NVIDIA green)
 ]
 _PROBE_COLOR = (255, 255, 255)
 

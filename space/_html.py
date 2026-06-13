@@ -1,18 +1,18 @@
 from __future__ import annotations
 
-# index 0-4 = teachers (aligns with MODEL_COLORS[1:] in _fig.py)
-_TEACHER_COLORS = ["#7c3aed", "#06b6d4", "#f59e0b", "#34d399", "#f472b6"]
+# index 0-5 = teachers (aligns with MODEL_COLORS[1:] in _fig.py)
+_TEACHER_COLORS = ["#7c3aed", "#06b6d4", "#f59e0b", "#34d399", "#f472b6", "#76b900"]
 
 
-def gate_html(gate_weights: list[float], teacher_names: list[str]) -> str:
-    """Horizontal bar chart sorted by weight descending."""
-    ranked = sorted(
-        enumerate(zip(gate_weights, teacher_names)),
-        key=lambda x: x[1][0],
-        reverse=True,
-    )
+def gate_html(gate_weights: list[float], teacher_names: list[str],
+              ranked: bool = True) -> str:
+    """Horizontal bar chart. ranked=False keeps teacher order fixed — used
+    while streaming so bars animate in place instead of swapping rows."""
+    pairs = list(enumerate(zip(gate_weights, teacher_names)))
+    if ranked:
+        pairs.sort(key=lambda x: x[1][0], reverse=True)
     rows = []
-    for orig_idx, (w, name) in ranked:
+    for orig_idx, (w, name) in pairs:
         color = _TEACHER_COLORS[orig_idx % len(_TEACHER_COLORS)]
         bar_pct = int(w * 100)
         rows.append(
@@ -20,7 +20,8 @@ def gate_html(gate_weights: list[float], teacher_names: list[str]) -> str:
             f'<span style="width:80px;font-family:monospace;font-size:11px;color:{color};'
             f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{name}</span>'
             f'<div style="flex:1;height:5px;background:#21262d;border-radius:3px;overflow:hidden;">'
-            f'<div style="width:{bar_pct}%;height:100%;background:{color};border-radius:3px;"></div>'
+            f'<div style="width:{bar_pct}%;height:100%;background:{color};border-radius:3px;'
+            f'transition:width 0.18s ease;"></div>'
             f'</div>'
             f'<span style="width:36px;font-family:monospace;font-size:11px;'
             f'color:#8b949e;text-align:right;">{w:.2f}</span>'
@@ -63,7 +64,7 @@ def task_html(gate_weights: list[float], teacher_names: list[str]) -> str:
     )
 
 
-def header_html() -> str:
+def header_html(n_teachers: int = 6, backend: str = "torch") -> str:
     """App header with ∀ logo, wordmark, and status pills."""
     def pill(color: str, dot_color: str, text: str, pulse: bool = False) -> str:
         dot_class = ' class="live-dot"' if pulse else ''
@@ -105,8 +106,9 @@ def header_html() -> str:
         # Right: pills
         '<div style="display:flex;gap:8px;flex-wrap:wrap;">'
         + pill("#06b6d4", "#06b6d4", "STUDENT · Qwen2.5-0.5B", pulse=True)
-        + pill("#7c3aed", "#7c3aed", "5 TEACHERS")
+        + pill("#7c3aed", "#7c3aed", f"{n_teachers} TEACHERS")
         + pill("#f59e0b", "#f59e0b", "PATH B · GEOMETRY")
+        + (pill("#76b900", "#76b900", "🦙 llama.cpp · GGUF") if backend == "llamacpp" else "")
         + '</div></div>'
 
         # Divider with glow

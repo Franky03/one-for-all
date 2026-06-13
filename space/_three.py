@@ -13,7 +13,7 @@ import html as _html
 import json
 import numpy as np
 
-MODEL_COLORS = ["#e6edf3", "#7c3aed", "#06b6d4", "#f59e0b", "#34d399", "#f472b6"]
+MODEL_COLORS = ["#e6edf3", "#7c3aed", "#06b6d4", "#f59e0b", "#34d399", "#f472b6", "#76b900"]
 
 _EMPTY = """
 <div style="width:100%;height:520px;background:#0d1117;border-radius:8px;

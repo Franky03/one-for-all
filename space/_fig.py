@@ -11,7 +11,7 @@ DARK = dict(
 GRID_COLOR = "#21262d"
 
 # index 0 = student, 1-5 = teachers
-MODEL_COLORS = ["#e6edf3", "#7c3aed", "#06b6d4", "#f59e0b", "#34d399", "#f472b6"]
+MODEL_COLORS = ["#e6edf3", "#7c3aed", "#06b6d4", "#f59e0b", "#34d399", "#f472b6", "#76b900"]
 
 
 def build_base_traces(viz: dict, coords3d: np.ndarray) -> list:

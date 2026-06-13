@@ -10,47 +10,20 @@ import html as _html_stdlib
 import gradio as gr
 import spaces
 
-import _data
 import _fig
 import _glb
 import _html
-import _probe
 
-# ── Startup: load data, fit UMAP, load student ───────────────────────────
-HF_TOKEN = os.environ.get("HF_TOKEN")
+# ── Startup: shared runtime (viz + UMAP + student) lives in _boot ─────────
+import _boot
 
-_local_viz = os.environ.get("VIZ_DATA_PATH")
-try:
-    if _local_viz:
-        VIZ = _data.load_from_path(_local_viz)
-        print(f"[ofa-space] loaded viz from {_local_viz}")
-    else:
-        VIZ = _data.load_and_parse(HF_TOKEN)
-except Exception as e:
-    print(f"[ofa-space] viz_data.json not available ({e}), using empty state")
-    VIZ = _data.make_empty_viz()
-
-try:
-    if VIZ["stacked"].shape[0] > 3:
-        REDUCER  = _data.fit_umap3d(VIZ["stacked"])
-        COORDS3D = REDUCER.embedding_
-        print(f"[ofa-space] UMAP done: {COORDS3D.shape}")
-    else:
-        print(f"[ofa-space] not enough points for UMAP: {VIZ['stacked'].shape[0]}")
-        REDUCER  = None
-        COORDS3D = None
-except Exception as e:
-    print(f"[ofa-space] UMAP failed ({e}), 3D disabled")
-    REDUCER  = None
-    COORDS3D = None
-
-try:
-    TOK, STUDENT, GATING = _probe.load_student(HF_TOKEN)
-    _MODEL_READY = True
-except Exception as e:
-    print(f"[ofa-space] Student not available ({e}). Probe disabled.")
-    TOK = STUDENT = GATING = None
-    _MODEL_READY = False
+RT = _boot.load_runtime()
+HF_TOKEN     = RT.hf_token
+VIZ          = RT.viz
+REDUCER      = RT.reducer
+COORDS3D     = RT.coords3d
+BACKEND      = RT.backend
+_MODEL_READY = RT.model_ready
 
 _INIT_GLB = _glb.build_glb(VIZ, COORDS3D, [])
 print(f"[ofa-space] GLB path: {_INIT_GLB}")
@@ -66,37 +39,86 @@ else:
     _CAM = (45, 30, 10)
 
 
-def _response_html(text: str) -> str:
+def _response_html(text: str, title: str = "MODEL RESPONSE", accent: str = "#8b949e") -> str:
     safe = _html_stdlib.escape(text).replace("\n", "<br>")
     return (
         '<div style="background:#0d1117;border:1px solid #30363d;border-radius:6px;'
         'padding:14px;margin-top:8px;">'
-        '<div style="font-size:10px;color:#8b949e;font-family:monospace;'
-        'margin-bottom:8px;letter-spacing:0.04em;">MODEL RESPONSE</div>'
+        f'<div style="font-size:10px;color:{accent};font-family:monospace;'
+        f'margin-bottom:8px;letter-spacing:0.04em;">{title}</div>'
         f'<div style="font-size:13px;color:#e6edf3;line-height:1.65;">{safe}</div>'
         "</div>"
     )
 
 
-# ── ZeroGPU probe handler ─────────────────────────────────────────────────
+# ── Backend dispatch: same handler code drives torch and llama.cpp ────────
+def _to_device():
+    _boot.to_device(RT)
+
+
+def _stream(text: str):
+    return _boot.stream(RT, text)
+
+
+def _stream_pair(text: str):
+    return _boot.stream_pair(RT, text)
+
+
+def _final_probe(text: str):
+    return _boot.final_probe(RT, text)
+
+
+# ── ZeroGPU probe handler (streaming generator) ───────────────────────────
 @spaces.GPU
-def probe_fn(text: str, probe_points: list) -> tuple:
-    no_change = _glb.build_glb(VIZ, COORDS3D, probe_points), probe_points, "", "", ""
+def probe_fn(text: str, probe_points: list):
     if not text.strip():
-        return no_change
+        yield gr.skip(), probe_points, "", "", ""
+        return
     if not _MODEL_READY or REDUCER is None:
         msg = _html.gate_html([0.2] * 5, VIZ["teacher_names"] or ["—"] * 5)
-        return _glb.build_glb(VIZ, COORDS3D, probe_points), probe_points, "", msg, ""
-    device = "cuda" if __import__("torch").cuda.is_available() else "cpu"
-    STUDENT.to(device)
-    answer               = _probe.generate_response(text, STUDENT, TOK)
-    new_pt, gate_weights = _probe.run_probe(text, STUDENT, TOK, GATING, REDUCER)
-    updated              = probe_points + [new_pt]
-    glb_path             = _glb.build_glb(VIZ, COORDS3D, updated)
-    gate_h               = _html.gate_html(gate_weights, VIZ["teacher_names"])
-    task_h               = _html.task_html(gate_weights, VIZ["teacher_names"])
-    resp_h               = _response_html(answer)
-    return glb_path, updated, resp_h, gate_h, task_h
+        yield _glb.build_glb(VIZ, COORDS3D, probe_points), probe_points, "", msg, ""
+        return
+    _to_device()
+    names = VIZ["teacher_names"]
+
+    # Stream tokens + live gate bars; skip the 3D plot until the end.
+    partial = ""
+    for partial, gates in _stream(text):
+        yield (
+            gr.skip(), probe_points,
+            _response_html(partial),
+            _html.gate_html(gates, names, ranked=False),
+            gr.skip(),
+        )
+
+    # Final pass: pooled probe point in soul space + dominant-teacher badge.
+    new_pt, gate_weights = _final_probe(text)
+    updated = probe_points + [new_pt]
+    yield (
+        _glb.build_glb(VIZ, COORDS3D, updated), updated,
+        _response_html(partial),
+        _html.gate_html(gate_weights, names),
+        _html.task_html(gate_weights, names),
+    )
+
+
+# ── ZeroGPU arena handler: base (LoRA off) vs deku, same prompt ───────────
+@spaces.GPU
+def arena_fn(text: str):
+    if not text.strip():
+        yield "", "", ""
+        return
+    if not _MODEL_READY:
+        yield "", _response_html("model not loaded", "DEKU · DISTILLED"), ""
+        return
+    _to_device()
+    names = VIZ["teacher_names"]
+    for base_text, deku_text, gates in _stream_pair(text):
+        yield (
+            _response_html(base_text, "BASE · QWEN2.5-0.5B", accent="#8b949e"),
+            _response_html(deku_text, "DEKU · DISTILLED", accent="#7c3aed"),
+            _html.gate_html(gates, names, ranked=False),
+        )
 
 
 # ── CSS ───────────────────────────────────────────────────────────────────
@@ -294,7 +316,10 @@ div[data-testid="model3d"], .model3D-component {
 # ── Layout ────────────────────────────────────────────────────────────────
 with gr.Blocks(css=CSS, theme=gr.themes.Base(), title="One for All") as demo:
 
-    gr.HTML(_html.header_html())
+    gr.HTML(_html.header_html(
+        n_teachers=len(VIZ["teacher_names"]) or 6,
+        backend=BACKEND,
+    ))
     probe_state = gr.State([])
 
     with gr.Tabs():
@@ -335,7 +360,42 @@ with gr.Blocks(css=CSS, theme=gr.themes.Base(), title="One for All") as demo:
                         'font-family:monospace;">↑ new probe point will appear in soul space</div>'
                     )
 
-        # ── Tab 2: Geometria ──────────────────────────────────────────────
+        # ── Tab 2: Arena — base vs deku, same prompt ──────────────────────
+        with gr.TabItem("Arena"):
+            gr.HTML(
+                '<div style="display:flex;align-items:center;gap:8px;'
+                'font-size:14px;font-weight:600;color:#e6edf3;margin:8px 0;">'
+                '<span style="color:#f59e0b;">⚔</span>One prompt, two models'
+                '<span style="font-family:monospace;font-size:10px;color:#8b949e;">'
+                'same 0.5B weights — LoRA adapter off vs on</span>'
+                '</div>'
+            )
+            arena_box = gr.Textbox(
+                lines=3,
+                placeholder="Ask something — watch base and distilled race side by side…",
+                label="",
+            )
+            arena_btn = gr.Button("Run both", variant="primary")
+            with gr.Row():
+                with gr.Column():
+                    base_out = gr.HTML()
+                with gr.Column():
+                    deku_out = gr.HTML()
+            arena_gate_out = gr.HTML()
+            gr.Examples(
+                examples=[
+                    "Natalia sold clips to 48 of her friends in April, and then she "
+                    "sold half as many clips in May. How many clips did Natalia sell "
+                    "altogether in April and May?",
+                    "Which property of a mineral can be determined just by looking "
+                    "at it? (A) luster (B) mass (C) weight (D) hardness",
+                    "Write a Python function that checks if a word is a palindrome.",
+                    "Explain why the sky is blue in two sentences.",
+                ],
+                inputs=[arena_box],
+            )
+
+        # ── Tab 3: Geometria ──────────────────────────────────────────────
         with gr.TabItem("Geometry"):
             with gr.Row():
                 with gr.Column(scale=7):
@@ -371,7 +431,7 @@ with gr.Blocks(css=CSS, theme=gr.themes.Base(), title="One for All") as demo:
                             f'</div>'
                         )
 
-        # ── Tab 3: Treino ─────────────────────────────────────────────────
+        # ── Tab 4: Treino ─────────────────────────────────────────────────
         with gr.TabItem("Training"):
             with gr.Row():
                 gr.Plot(
@@ -388,6 +448,11 @@ with gr.Blocks(css=CSS, theme=gr.themes.Base(), title="One for All") as demo:
         probe_fn,
         inputs=[prompt_box, probe_state],
         outputs=[umap_plot, probe_state, resp_out, gate_out, task_out],
+    )
+    arena_btn.click(
+        arena_fn,
+        inputs=[arena_box],
+        outputs=[base_out, deku_out, arena_gate_out],
     )
 
 

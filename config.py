@@ -25,13 +25,17 @@ class TeacherSpec:
     strength: str = ""        # human-readable note (code, multilingual, ...)
 
 
-# The five teachers from the paper.
+# The five teachers from the paper + Nemotron-Mini (NVIDIA, pruned+distilled
+# from Nemotron-4 15B — itself a distillation artifact, which fits the theme).
+# Note: Nemotron has a 256k vocab; its logits are never used (geometry-only
+# teacher), but the lm_head forward costs ~4GB transient at batch 8 / seq 512.
 DEFAULT_TEACHERS: list[TeacherSpec] = [
-    TeacherSpec("qwen",    "Qwen/Qwen2.5-1.5B-Instruct", 1536, "code, structured reasoning"),
-    TeacherSpec("smollm",  "HuggingFaceTB/SmolLM2-1.7B-Instruct", 2048, "curated quality"),
-    TeacherSpec("phi",     "microsoft/Phi-3.5-mini-instruct", 3072, "instruction, CoT"),
-    TeacherSpec("gemma",   "google/gemma-2-2b-it", 2304, "long context"),
-    TeacherSpec("minicpm", "openbmb/MiniCPM-2B-sft-bf16", 2304, "multilingual, efficiency"),
+    TeacherSpec("qwen",     "Qwen/Qwen2.5-1.5B-Instruct", 1536, "code, structured reasoning"),
+    TeacherSpec("smollm",   "HuggingFaceTB/SmolLM2-1.7B-Instruct", 2048, "curated quality"),
+    TeacherSpec("phi",      "microsoft/Phi-3.5-mini-instruct", 3072, "instruction, CoT"),
+    TeacherSpec("gemma",    "google/gemma-2-2b-it", 2304, "long context"),
+    TeacherSpec("minicpm",  "openbmb/MiniCPM-2B-sft-bf16", 2304, "multilingual, efficiency"),
+    TeacherSpec("nemotron", "nvidia/Nemotron-Mini-4B-Instruct", 3072, "roleplay, RAG, function calling"),
 ]
 
 
